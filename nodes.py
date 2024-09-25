@@ -13,6 +13,7 @@ from diffusers import (
     DDPMScheduler,
     ControlNetModel,
     StableDiffusionControlNetPipeline,
+    StableDiffusionXLControlNetPipeline
 )
 from diffusers.utils import load_image
 from diffusers.models.controlnet_sd3 import SD3ControlNetModel
@@ -62,9 +63,7 @@ def add_fg(full_img, fg_img, mask_img):
     return Image.fromarray(np.clip(full_img, 0, 255).astype(np.uint8))
 
 
-def download(model, name):
-    model_name = model.rsplit('/', 1)[-1]
-    model_dir = (os.path.join(folder_paths.models_dir, name, model_name))
+def download(model, model_dir):
     if not os.path.exists(model_dir):
         print(f"Downloading {model}")
         snapshot_download(repo_id=model, local_dir=model_dir, local_dir_use_symlinks=False)
@@ -117,12 +116,15 @@ class EcomXL_Controlnet_ModelLoader:
 
     def load_controlnet(self, model, use_safetensors):
         device = mm.get_torch_device()
-        download(model, "controlnet")
+        # import pdb;pdb.set_trace()
+        model_name = model.rsplit('/', 1)[-1]
+        model_dir = (os.path.join(folder_paths.models_dir, "inpaint", model_name))
+        download(model, model_dir)
         controlnet = ControlNetModel.from_pretrained(
-            model,
+            model_dir,
             # variant=variant,
             use_safetensors=use_safetensors).to(device)
-        controlnet.enable_model_cpu_offload()
+        # controlnet.enable_model_cpu_offload()
         return (controlnet,)
 
 
@@ -150,9 +152,10 @@ class EcomXL_SDXL_Inpaint_ModelLoader:
 
     def load_model(self, model, controlnet, use_safetensors):
         device = mm.get_torch_device()
-
-        download(model, name="checkpoints")
-        pipeline = StableDiffusionControlNetPipeline.from_pretrained(
+        model_name = model.rsplit('/', 1)[-1]
+        model_dir = (os.path.join(folder_paths.models_dir, "checkpoints", model_name))
+        download(model, model_dir)
+        pipeline = StableDiffusionXLControlNetPipeline.from_pretrained(
             model,
             controlnet=controlnet,
             # variant=variant,
@@ -216,7 +219,7 @@ class SD3_Controlnet_ModelLoader:
                     {"default": "alimama-creative/SD3-Controlnet-Inpainting"}),
             },
             "optional": {
-                "variant": ("STRING", {"default": "fp16"}),
+                # "variant": ("STRING", {"default": "fp16"}),
                 "use_safetensors": ("BOOLEAN", {"default": False})
             }
         }
@@ -226,14 +229,19 @@ class SD3_Controlnet_ModelLoader:
     FUNCTION = "load_controlnet"
     CATEGORY = "AliControlnetInpainting"
 
-    def load_controlnet(self, model, variant, use_safetensors):
+    def load_controlnet(self, model, use_safetensors):
         device = mm.get_torch_device()
-        download(model, "controlnet")
+        model_name = model.rsplit('/', 1)[-1]
+        model_dir = (os.path.join(folder_paths.models_dir, "inpaint", model_name))
+        download(model, model_dir)
 
         controlnet = SD3ControlNetModel.from_pretrained(
-            model, variant=variant, use_safetensors=use_safetensors, extra_conditioning_channels=1
+            model_dir,
+            # variant=variant,
+            use_safetensors=use_safetensors, extra_conditioning_channels=1,
+            low_cpu_mem_usage=False, ignore_mismatched_sizes=True
         ).to(device)
-        controlnet.enable_model_cpu_offload()
+        # controlnet.enable_model_cpu_offload()
         return (controlnet,)
 
 
@@ -249,7 +257,7 @@ class SD3_Inpainting_ModelLoader:
                 "controlnet": ("CONTROLNET",)
             },
             "optional": {
-                "variant": ("STRING", {"default": "fp16"}),
+                # "variant": ("STRING", {"default": "fp16"}),
                 "use_safetensors": ("BOOLEAN", {"default": False})
             }
         }
@@ -259,18 +267,22 @@ class SD3_Inpainting_ModelLoader:
     FUNCTION = "load_model"
     CATEGORY = "AliControlnetInpainting"
 
-    def load_model(self, model, controlnet, variant, use_safetensors):
+    def load_model(self, model, controlnet, use_safetensors):
         device = mm.get_torch_device()
-        download(model, name="checkpoints")
+        model_name = model.rsplit('/', 1)[-1]
+        model_dir = (os.path.join(folder_paths.models_dir, "checkpoints", model_name))
+        download(model, model_dir)
 
         pipeline = StableDiffusion3ControlNetInpaintingPipeline.from_pretrained(
-            model,
+            model_dir,
             controlnet=controlnet,
-            variant=variant,
+            # variant=variant,
             use_safetensors=use_safetensors,
-        ).to(device)
+            torch_dtype=torch.float16,
+        )
         pipeline.text_encoder.to(torch.float16)
         pipeline.controlnet.to(torch.float16)
+        pipeline.to(device)
         return (pipeline,)
 
 
@@ -286,7 +298,7 @@ class Flux_Controlnet_ModelLoader:
                     {"default": "alimama-creative/FLUX.1-dev-Controlnet-Inpainting-Alpha"}),
             },
             "optional": {
-                "variant": ("STRING", {"default": "fp16"}),
+                # "variant": ("STRING", {"default": "fp16"}),
                 "use_safetensors": ("BOOLEAN", {"default": False})
             }
         }
@@ -296,14 +308,16 @@ class Flux_Controlnet_ModelLoader:
     FUNCTION = "load_controlnet"
     CATEGORY = "AliControlnetInpainting"
 
-    def load_controlnet(self, model, variant, use_safetensors):
+    def load_controlnet(self, model, use_safetensors):
         device = mm.get_torch_device()
-        download(model, "controlnet")
+        model_name = model.rsplit('/', 1)[-1]
+        model_dir = (os.path.join(folder_paths.models_dir, "inpaint", model_name))
+        download(model, model_dir)
         controlnet = FluxControlNetModel.from_pretrained(
-            model,
-            variant=variant,
+            model_dir,
+            # variant=variant,
             use_safetensors=use_safetensors).to(device)
-        controlnet.enable_model_cpu_offload()
+        # controlnet.enable_model_cpu_offload()
         return (controlnet,)
 
 
@@ -319,7 +333,7 @@ class Flux_Inpainting_ModelLoader:
                 "controlnet": ("CONTROLNET",)
             },
             "optional": {
-                "variant": ("STRING", {"default": "fp16"}),
+                # "variant": ("STRING", {"default": "fp16"}),
                 "use_safetensors": ("BOOLEAN", {"default": False})
             }
         }
@@ -329,15 +343,17 @@ class Flux_Inpainting_ModelLoader:
     FUNCTION = "load_model"
     CATEGORY = "AliControlnetInpainting"
 
-    def load_model(self, model, controlnet, variant, use_safetensors):
+    def load_model(self, model, controlnet, use_safetensors):
         device = mm.get_torch_device()
-        download(model, name="checkpoints")
+        model_name = model.rsplit('/', 1)[-1]
+        model_dir = (os.path.join(folder_paths.models_dir, "checkpoints", model_name))
+        download(model, model_dir)
 
         transformer = FluxTransformer2DModel.from_pretrained(
-            "black-forest-labs/FLUX.1-dev", subfolder='transformer', torch_dytpe=torch.bfloat16
+            model_dir, subfolder='transformer', torch_dytpe=torch.bfloat16
         )
         pipeline = FluxControlNetInpaintingPipeline.from_pretrained(
-            "black-forest-labs/FLUX.1-dev",
+            model_dir,
             controlnet=controlnet,
             transformer=transformer,
             torch_dtype=torch.bfloat16
@@ -357,9 +373,9 @@ class AliInpaintingsampler:
                 "prompt": ("STRING", {"multiline": True}),
                 "negative_prompt": ("STRING", {"multiline": True,
                                                "default": "deformed, distorted, disfigured, poorly drawn, bad anatomy, wrong anatomy, extra limb, missing limb, floating limbs, mutated hands and fingers, disconnected limbs, mutation, mutated, ugly, disgusting, blurry, amputation, NSFW", }),
-                "width": ("INT", {"default": 512, "min": 64, "max": 2048, "step": 8}),
-                "height": ("INT", {"default": 512, "min": 64, "max": 2048, "step": 8}),
-                "steps": ("INT", {"default": 50, "min": 1, "max": 500, "step": 1}),
+                "width": ("INT", {"default": 1024, "min": 64, "max": 2048, "step": 8}),
+                "height": ("INT", {"default": 1024, "min": 64, "max": 2048, "step": 8}),
+                "steps": ("INT", {"default": 20, "min": 1, "max": 500, "step": 1}),
                 "guidance_scale": ("FLOAT", {"default": 7.0, "min": 1.0, "max": 100.0, "step": 0.5}),
                 "controlnet_conditioning_scale": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.1}),
                 "true_guidance_scale": ("FLOAT", {"default": 3.5, "min": 1.0, "max": 100.0, "step": 0.5}),
@@ -389,9 +405,9 @@ class AliInpaintingsampler:
                 controlnet_conditioning_scale,
                 true_guidance_scale,
                 seed,
-                batch_size,
+                # batch_size,
                 mode,
-                mask):
+                mask=None):
         device = mm.get_torch_device()
 
         generator = torch.Generator(device).manual_seed(seed)
@@ -443,7 +459,7 @@ class AliInpaintingsampler:
 
 
 NODE_CLASS_MAPPINGS = {
-    "EcomXL_LoadImage":EcomXL_LoadImage,
+    "EcomXL_LoadImage": EcomXL_LoadImage,
     "EcomXL_Controlnet_ModelLoader": EcomXL_Controlnet_ModelLoader,
     "EcomXL_SDXL_Inpaint_ModelLoader": EcomXL_SDXL_Inpaint_ModelLoader,
     "EcomXL_Condition": EcomXL_Condition,
